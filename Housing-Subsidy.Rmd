@@ -45,7 +45,7 @@ palette2 <- c("#DBC2CF","#9FA2B2")
 palette1 <- c("#DBC2CF","#16262E")
 
 
-housing <- read.csv("/Users/emzhou/Desktop/housingSubsidy.csv")
+housing <- read.csv("housingSubsidy.csv")
 housing <- housing %>% 
   mutate(pdays = as.factor(pdays)) %>% 
   mutate(pdays = ifelse(pdays =="999", "No", "Yes"))
