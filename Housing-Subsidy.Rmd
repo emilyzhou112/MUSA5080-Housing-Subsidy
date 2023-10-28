@@ -25,6 +25,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
+People-based machine learning, a field harnessing the power of data-driven insights into human behaviors and preferences, has become pivotal for businesses and organizations. With algorithms trained on human-centric data, businesses get to personalize products, services, and experiences based on individual customer preferences. At any point, the bottom line of any businesses and organizations may be affected, if a client no longer wish to participate, donate, or purchase a good, which makes it extra important to have a predictive model that captures these potential changes. Like any machine learning applications, however, it is difficult to capture the nuances in human behavior with a single model, nor is it possible to have a unbiased sample dataset that truly reflect human behavior. This means that continuous model adaptation and recognition of these complexities are essential for effective decision-making based on these models. 
+
+The goal of this report is to fit a logistic regression model to predict whether homeowners in Emil City will enter and take a home repair tax credit. To contextualize, the city is considering a more proactive approach for targeting homeowners who would quality for this tax credit program and the Department of Housing and Community Development (HCD) have been trying to proactively reach out to eligible homeowners ever year. It is predicted that houses that transacted after taking the credit, will sell with a \$10,000 premium, on average. Homes surrounding the repaired home see an aggregate premium of \$56,000, on average. The thorny task for the HCD is to target homeowners with the highest likelihood of accepting the credit. In this case, they could maximize the benefits of the aggregate premium of houses while reduce the marketing resources cost. As of now, typically not all eligible homeowners they reach out and enter the program ultimately takes the credit.
+
+That said, we will need to train a better model to ensure that the HCD will not be reaching out to eligible homeowners at random. Logistic regression is used here due to its interpretability and suitability for binary classification problems (in this case, our dependent variable indicate whether the a homeowner will take the credit or not). We will **first** start with data exploration to determine variables most explains homeowner's behavior. **Then**, we split the data into training and testing set, fit a regression model, and constructed confusion matrix at 50% threshold to see the extent to which our model can correctly predict homeowner entering the credit program (true positive), or correctly predict homeowner not taking the credit (true negative). This is **followed** by a cross validation test to compute ROC, sensitivity, and specificity. We **conclude** our analysis with a cost/benefit analysis and determine the optimal threshold of delineating positive and negative prediction that would maximize the revenue. 
+
+The GitHub repository for this report is [here](https://github.com/emilyzhou112/MUSA5080-Housing-Subsidy).
+
+
 ```{r library and dataset, include=FALSE}
 options(scipen=10000000)
 
@@ -54,7 +63,12 @@ housing <- housing %>%
 
 # Variables Examination
 
+The first part of this report focuses on data exploration to see how each factor in our dataset relates to homeowner's decision to accept home repair tax credit. Variables are split into categorical variables and numeric variables respectively, for which we conducted chi-square and anova tests to examine if there's a significant association between dependent variable and independent variables. 
+
 ## Categorical Variables
+
+The figure below shows the difference in the number of homeowners who accepted and did not accept tax credit based on a different categorical features. We observed the following. There seems to be a significant difference in the number of people accepting credit who were contacted via cellular, who had a university degree, work as admin or technician, were married, were previously contacted in May, were contacted recently, were Philadelphia residents, and had previously accepted the credit. On the other hand, there doesn't seem to be a significant difference in the number of people accepting credit depending on the day of the week they were contacted, their mortgage status, and presence of tax lien. 
+
 
 ```{r categorical var, fig.height=10, fig.width=13}
 
@@ -90,8 +104,10 @@ cat_var %>%
         axis.title=element_text(size=9), 
         panel.background = element_blank(),
         panel.border = element_rect(colour = "grey", fill=NA, linewidth =0.8))
+					
 ```
 
+Using pure visual evidence is not enough to explain the significance of our categorical variables in predicting whether homeowners will take the credit. To support the above visualization, we conducted chi-square test iteratively for all categorical variables. The chi-square test determines if there is a significant association between categorical variables. It compares the observed frequencies of different categories in a contingency table with the frequencies that would be expected if the variables were independent. The table below shows that `Ways of Contact`, `Edcucation`, `Marital`, `Occupation`, `Month of Last Contact`, `Previoust Campaign Outcome`, `Lien Presence` and `Days After Last Contact` are significant predictors in determining homeowner's likelihood of accepting the credit. 
 
 ```{r chisq test, warning=FALSE}
 
@@ -139,6 +155,9 @@ chi_square_results %>%
 
 
 ## Numeric Variables
+
+The figure below shows the difference in the number of homeowners who accepted and did not accept tax credit based on a different numeric features. There seems to be a significant difference in the number of people accepting credit based on their age, number of contacts for this campaign and before this campaign, as well as inflation and unemployment rate of that time. 
+
 ```{r numeric var, fig.height=8, fig.width=11}
 
 numeric_var <- housing %>% 
@@ -172,6 +191,8 @@ numeric_var %>%
         panel.border = element_rect(colour = "grey", fill=NA, linewidth =0.8))
 ```
 
+Because these numeric features all have different scales and are difficult to compare across, we made another density plot, which conveys the same information, but shows distribution of a continuous variable. Surprisingly, we see that the distribution of `Consumer Confidence Index`, `Consumer Price Index`, and `Amount Spent on Repairs` all significantly differ between homeowners who accepted and did not accept the tax credit. 
+
 ```{r numeric var density, fig.height=8, fig.width=13}
 
 numeric_var %>%
@@ -199,8 +220,7 @@ numeric_var %>%
         panel.border = element_rect(colour = "grey", fill=NA, linewidth =0.8))
 ```
 
-
-
+We further conducted ANOVA test for all numeric features to see if there's a significant difference in mean age, for example, across people who take and did not take the credit. The result is in concur with our expectations: all numeric variables are significant predictors. 
 
 ```{r anova test}
 
@@ -242,7 +262,16 @@ anova_results %>%
 
 # Logistic Regression
 
+We then fit a logistic regression containing all variables in our dataset. To do so, we split our data randomly into 65% of training dataset and 35% of testing dataset. Some of our variables, such as Lien and Education, have single occurrence and therefore needs to be put into the training set to avoid new levels appearing in the testing set. This model shows that some indicators are significantly correlated with credit acceptance with p < 0.05. This include age, some categories of job, ways of contact, month last contacted, previous campaign outcome, unemployment rate, consumer price and confidence indices. However, the majority of predictors are not significant. 
+
 ```{r housing model, max.height='200px'}
+
+set.seed(479)
+trainIndex <- createDataPartition(y = paste(housing$taxLien, housing$education) , p = .65,
+                                  list = FALSE,
+                                  times = 1)
+housingTrain <- housing[ trainIndex,]
+housingTest  <- housing[-trainIndex,]
 
 housingModel <- glm(y_numeric ~ .,
                   data=housingTrain %>% 
@@ -265,21 +294,9 @@ coefficients_table %>%
   footnote(general_title = "\n", general = "Table 3")
 ```
 
-
+The model is being tested on the test set and a mosaic plot is created to visualize the confusion matrix. Unfortunately, the model has low sensitivity rate of only **0.23**. Sensitivity is the true-positive rate, which is the proportion of actual positive cases that were correctly identified by the model. Since our model's accuracy rate is high **(0.89)**, this means that our model missing a significant number of positive cases. These are cases where we correctly predict that homeowners will accept the credit and they actually did. 
 
 ```{r fitting housing model, warning=FALSE}
-
-set.seed(479)
-trainIndex <- createDataPartition(y = paste(housing$taxLien, housing$education) , p = .65,
-                                  list = FALSE,
-                                  times = 1)
-housingTrain <- housing[ trainIndex,]
-housingTest  <- housing[-trainIndex,]
-
-housingModel <- glm(y_numeric ~ .,
-                  data=housingTrain %>% 
-                    dplyr::select(age, job, marital, education, taxLien, mortgage, taxbill_in_phl, contact, month, day_of_week, campaign, pdays, poutcome, unemploy_rate, cons.conf.idx, cons.price.idx, inflation_rate, spent_on_repairs, y_numeric), family="binomial" (link="logit"))
-
 
 testProbs <- data.frame(Outcome = as.factor(housingTest$y_numeric),
                         Probs = predict(housingModel, housingTest, type= "response"))
@@ -304,6 +321,19 @@ housingmatrix %>%
 
 # Improving Model
 
+However, just because a variable is significant at predicting credit acceptance does not mean that it is a relevant or meaningful predictor. To improve this model, not only do we need to perform feature engineering to increase sensitivity while maintain overall accuracy, but also do we need to exclude irrelevant features. To fit a new model:  
+
+- **Firstly**, we collapsed the categories in education and employment. For education, considering that having a university degree serves a benchmark in determining credit acceptance, we recode it into two categories: `highschool.below` and `highschool.above`. For employment, we recode it into four major categories: `unemployed`, `white-collar`, `blue-collar`, and `self-employed`, considering that employment status and employment sector will both affect credit acceptance. 
+
+- **Secondly**, we create interaction features between education and employment considering that different job may require different levels or type of education. 
+
+- **Thirdly**, we computed a new variable called campaign efficiency, which is the ratio of previous campaign successes to the number of contacts made, This will indicate the efficiency of previous campaigns in terms of successful credit acceptance. We also computed a composite feature representing economic conditions based on `unemploy_rate`, `cons.price.idx`, `cons.conf.idx`, and `inflation_rate`.
+
+- **Fourthly**, carefully reviewing the dataset leads us to realize that it is imbalance. Usually, imbalanced datasets can lead the model to be biased towards the majority class, causing it to perform poorly on the minority class. In our case, a significant number of attributes we have are cases when homeowner declined tax credit. This makes feature weighting extra important. By assigning appropriate weights to features, we can ensure that the model gives sufficient importance to the minority class, helping it learn the underlying patterns in both classes more effectively.
+
+- **Finally**, we excluded variable `Month we last contacted individual`, `Day of the week we last contacted individual`, `Lien` and `marital`, not merely because these variables are not significant predictors, but because the former two features won't be relevant to credit acceptance, variable lien contains too many unknown values, and there might be colinearity between martial, age, job, and education. 
+
+
 ```{r feature engineering}
 
 housing <- housing %>% 
@@ -316,7 +346,6 @@ housing <- housing %>%
       job == "blue-collar" ~ "blue-collar", 
       TRUE ~ "white-collar"))
   
-housing$age_group <- cut(housing$age, breaks = c(0, 30, 50, Inf), labels = c("young_adult", "middle_age", "old_adult"))
 housing$job_education_interaction <- paste(housing$edu, housing$employment, sep="_")
 housing$campaign_efficiency <- housing$previous / housing$campaign
 housing$economic_conditions <- (housing$unemploy_rate + housing$cons.price.idx + housing$cons.conf.idx - housing$inflation_rate) / 4
@@ -324,12 +353,20 @@ imbalance_weight <- sum(housing$y_numeric == 0) / sum(housing$y_numeric == 1)
 
 ```
 
+Our improved model shows that most indicators are significantly correlated with credit acceptance with p < 0.05, except for some categories of job-education interaction as well as `pdays`, which is whether an individual has been contacted before. This is probably because `pday` is correlated with `poutcome`, another variable indicating success of previous contact. 
 
 ```{r improved model, warning=FALSE}
 
+set.seed(479)
+trainIndex <- createDataPartition(housing$y , p = .65,
+                                  list = FALSE,
+                                  times = 1)
+housingTrain <- housing[ trainIndex,]
+housingTest  <- housing[-trainIndex,]
+
 improvedModel <- glm(y_numeric ~ .,
                   data=housingTrain %>% 
-                    dplyr::select(y_numeric, age_group, job_education_interaction, mortgage, pdays, taxbill_in_phl, contact, poutcome, economic_conditions, previous, campaign_efficiency),  weights = ifelse(y_numeric == 1, imbalance_weight, 1), 
+                    dplyr::select(y_numeric, age, job_education_interaction, mortgage, pdays, contact, poutcome, economic_conditions, previous, campaign_efficiency),  weights = ifelse(y_numeric == 1, imbalance_weight, 1), 
                   family="binomial" (link="logit"))
 
 improved_sum <- summary(improvedModel)
@@ -350,19 +387,10 @@ coefficients_table %>%
 ```
 
 
+We tested our model and a mosaic plot is created to visualize the confusion matrix. Now, the model has much higher sensitivity rate of **0.61**. The accuracy rate dropped to **0.70**, but is still acceptable. This means that now, our model is able to capture a significantly more number of positive cases. 
 
 ```{r fit improved model, warning=FALSE}
-set.seed(479)
-trainIndex <- createDataPartition(housing$y , p = .65,
-                                  list = FALSE,
-                                  times = 1)
-housingTrain <- housing[ trainIndex,]
-housingTest  <- housing[-trainIndex,]
 
-improvedModel <- glm(y_numeric ~ .,
-                  data=housingTrain %>% 
-                    dplyr::select(y_numeric, age_group, job_education_interaction, mortgage, pdays, taxbill_in_phl, contact, poutcome, economic_conditions, previous, campaign_efficiency),  weights = ifelse(y_numeric == 1, imbalance_weight, 1), 
-                  family="binomial" (link="logit"))
 
 testProbs <- data.frame(Outcome = as.factor(housingTest$y_numeric),
                         Probs = predict(improvedModel, housingTest, type= "response"))
@@ -386,8 +414,34 @@ improvedmatrix %>%
   footnote(general_title = "\n", general = "Table 6")
 
 ```
+We computed the Area Under the Receiver Operating Characteristic Curve (AUC-ROC) metric to further evaluate the performance of our improved model. The AUC value ranges from 0 to 1, where 0.5 means a model with no discriminatory power (it performs as well as random chance), and 1 means a perfect model (it perfectly distinguishes between positive and negative cases).Generally, an AUC between 0.7 and 0.8 is considered acceptable and indicates a fair to good performance of the model. While there is room for improvement, a score of 0.74 suggests that the model is capturing important patterns in the data and making predictions better than random guessing.
+
+```{r auc, warning=FALSE, message=FALSE, include=FALSE}
+
+auc(testProbs$Outcome, testProbs$Probs)
+
+```
+
+```{r auc plot, warning=FALSE}
+ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#2E4756") +
+    labs(title = "ROC Curve for Improved Model") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = "#DBC2CF") +
+  theme(plot.subtitle = element_text(size = 9,face = "italic"),
+        plot.title = element_text(size = 12, face = "bold"), 
+        axis.text.x=element_text(size=8),
+        axis.text.y=element_text(size=8), 
+        axis.title=element_text(size=9), 
+        panel.background = element_blank(),
+        panel.border = element_rect(colour = "grey", fill=NA, linewidth =0.8))
+  
+```
+
 
 # Cross Validation
+
+Next, we performed cross validation test for both of original model and improved model. The trainControl parameter is set to run 100 k-folds and to output predicted probabilities, classProbs, for two classes, those who accepted the credit and those who did not. Additional parameters output AUC (the train function refers to this as ‘ROC’) and confusion metrics for each fold. The three metrics in the cvFit output are for mean AUC, Sensitivity, and Specificity across all 100 folds. Here, the ROC for our original model and improved model are 0.76 and 0.70, the Sensitivity are 0.97 and 0.98, while the Specificity are 0.21 and 0.17 respectively. 
 
 ```{r cross validation, warning=FALSE}
 ctrl <- trainControl(method = "cv", number = 100, classProbs=TRUE, summaryFunction=twoClassSummary)
@@ -400,11 +454,12 @@ cvFit_original <- train(y ~ .,
                              metric="ROC", trControl = ctrl)
 cvFit_improved <- train(y ~ .,
                   data=housing %>% 
-                    dplyr::select(y, age_group, job_education_interaction, mortgage, pdays, taxbill_in_phl, contact, poutcome, economic_conditions, previous, campaign_efficiency),   weights = ifelse(y == "Yes", imbalance_weight, 1),
+                    dplyr::select(y, age, job_education_interaction, mortgage, pdays, contact, poutcome, economic_conditions, previous, campaign_efficiency),   weights = ifelse(y == "Yes", imbalance_weight, 1),
                 method="glm", family="binomial",
                 metric="ROC", trControl = ctrl)
 ```
 
+The figure below plots the distribution of AUC, Sensitivity, and Specificity across the 100 folds. The tighter each distribution is to its mean, the more generalizable the model. Both models generalizes well to sensitivity -- the rate it correctly predicts credit acceptance, instead of specificity. It seems our would-be decision-making tool is inconsistent in how it predicts the credit acceptance. This inconsistency  will have a direct effect on the marketing and resource allocation process should this algorithm be put into production.
 
 ```{r CV plot original, warning=FALSE, message=FALSE}
 
@@ -430,6 +485,7 @@ dplyr::select(cvFit_original$resample, -Resample) %>%
 
 
 ```{r CV plot improved, warning=FALSE, message=FALSE}
+
 dplyr::select(cvFit_improved$resample, -Resample) %>%
   gather(metric, value) %>%
   left_join(gather(cvFit_improved$results[2:4], metric, mean)) %>%
@@ -450,28 +506,6 @@ dplyr::select(cvFit_improved$resample, -Resample) %>%
 
 ```
 
-
-```{r auc, warning=FALSE, message=FALSE, include=FALSE}
-
-auc(testProbs$Outcome, testProbs$Probs)
-
-```
-
-```{r auc plot, warning=FALSE}
-ggplot(testProbs, aes(d = as.numeric(Outcome), m = Probs)) +
-  geom_roc(n.cuts = 50, labels = FALSE, colour = "#2E4756") +
-    labs(title = "ROC Curve for Improved Model") +
-  style_roc(theme = theme_grey) +
-  geom_abline(slope = 1, intercept = 0, size = 1.5, color = "#DBC2CF") +
-  theme(plot.subtitle = element_text(size = 9,face = "italic"),
-        plot.title = element_text(size = 12, face = "bold"), 
-        axis.text.x=element_text(size=8),
-        axis.text.y=element_text(size=8), 
-        axis.title=element_text(size=9), 
-        panel.background = element_blank(),
-        panel.border = element_rect(colour = "grey", fill=NA, linewidth =0.8))
-  
-```
 
 # Cost Benefit Analysis
 True Positive
